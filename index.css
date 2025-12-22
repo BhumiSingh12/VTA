@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { 
+  margin: 0; 
+  font-family: system-ui, sans-serif; 
+}
+
+.leaflet-container { height: 100%; width: 100%; }
+
+#root {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0f0f1a 0%, #1a0033 50%, #2d0033 100%);
+  background-attachment: fixed;
+}
+
+/* Dark cards with pink glow */
+.dark-card {
+  background: rgba(26, 26, 46, 0.95);
+  border: 1px solid #ec4899;
+  box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
+  backdrop-filter: blur(10px);
+}
