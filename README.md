@@ -2,7 +2,7 @@
 
 A **beautiful, modern, fully functional** real-time vehicle tracking system built with **React + Vite + Tailwind CSS + Leaflet + Chart.js**
 
-Live Demo: (https://vta-67.netlify.app/) (or run locally)
+Live Demo: (https://vehical-trk.netlify.app/) (or run locally)
 
 ---
 
