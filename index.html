@@ -1,13 +1,793 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>V-TRACK Pro</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Vehicle Tracking — Mega Dashboard (Enhanced)</title>
+
+<!-- Leaflet (maps) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  /* ========== THEME & VARIABLES ========== */
+  :root{
+    --bg:#07102a;
+    --panel:#0f1430;
+    --accent1:#7b5cff;
+    --accent2:#00d4ff;
+    --glass: rgba(255,255,255,0.03);
+    --muted: rgba(230,235,255,0.55);
+    --danger: #ff6b6b;
+    --success: #27e3c2;
+    --card-shadow: 0 10px 38px rgba(2,6,25,0.6);
+    --radius:12px;
+    --glass-border: rgba(255,255,255,0.04);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Arial; background:
+    radial-gradient(1200px 800px at 8% 8%, rgba(123,92,255,0.08), transparent 6%),
+    linear-gradient(180deg,#060817 0%, #071034 40%, #081133 100%); color:#e8eeff; -webkit-font-smoothing:antialiased;}
+  a{color:inherit; text-decoration:none}
+
+  /* ========== OVERLAY LOGIN ========== */
+  #loginOverlay{
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(180deg, rgba(2,6,25,0.7), rgba(2,6,25,0.7)); z-index:9000;
+  }
+  .loginCard{
+    width:420px; padding:28px; border-radius:16px; background: linear-gradient(135deg, rgba(123,92,255,0.08), rgba(0,212,255,0.04));
+    backdrop-filter: blur(10px); box-shadow: var(--card-shadow); border:1px solid var(--glass-border);
+  }
+  .loginCard h2{ margin:0 0 10px; color:var(--accent1); font-size:20px }
+  .formRow{ margin-bottom:12px }
+  .loginCard input, .loginCard select{
+    width:100%; padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.02); color:inherit; outline:none;
+  }
+  .loginActions{ display:flex; gap:10px; margin-top:8px; justify-content:flex-end }
+  .btn{ padding:10px 14px; border-radius:10px; cursor:pointer; border:none; font-weight:700; font-size:13px }
+  .btn-primary{ background:linear-gradient(90deg,var(--accent1), #8f6cff); color:#03021a }
+  .btn-ghost{ background:transparent; border:1px solid rgba(255,255,255,0.06); color:var(--muted) }
+  .small{ font-size:12px; color:var(--muted) }
+
+  /* ========== APP LAYOUT ========== */
+  #app{ position:fixed; inset:0; display:flex; gap:18px; padding:18px; align-items:stretch }
+  .sidebar{
+    width:270px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius:var(--radius); padding:18px; box-shadow: var(--card-shadow); display:flex; flex-direction:column;
+    border:1px solid var(--glass-border);
+  }
+  .brand{ font-weight:900; color:var(--accent1); font-size:18px; letter-spacing:0.3px; margin-bottom:14px }
+  .nav{ display:flex; flex-direction:column; gap:8px; margin-bottom:8px }
+  .nav button{ text-align:left; padding:12px 12px; color:#dfe9ff; background:transparent; border-radius:10px; border:none; cursor:pointer; font-weight:700 }
+  .nav button.active{ background:linear-gradient(90deg, rgba(123,92,255,0.12), rgba(0,212,255,0.04)); box-shadow:inset 0 1px 0 rgba(255,255,255,0.02) }
+  .sidebarFooter{ margin-top:auto; display:flex; gap:8px; align-items:center; justify-content:space-between; color:var(--muted) }
+
+  /* ========== MAIN ========== */
+  .main{ flex:1; display:flex; flex-direction:column; gap:14px; min-width:0 }
+  .topbar{ height:66px; border-radius:var(--radius); padding:12px 18px; display:flex; justify-content:space-between; align-items:center;
+    background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02)); border:1px solid var(--glass-border); box-shadow:var(--card-shadow); }
+  .topLeft{ display:flex; gap:12px; align-items:center; min-width:0 }
+  .search{ padding:8px 12px; border-radius:10px; background:rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03); color:var(--muted); min-width:220px }
+  .statusChip{ padding:8px 12px; border-radius:999px; background:linear-gradient(90deg,var(--accent2), rgba(123,92,255,0.12)); color:#021129; font-weight:700 }
+
+  .layout{ flex:1; display:grid; grid-template-columns: 1fr 380px; gap:14px; min-height:0 }
+  .panel{ border-radius:12px; background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02)); padding:14px; box-shadow:var(--card-shadow); overflow:hidden; border:1px solid var(--glass-border) }
+
+  /* Map */
+  #map{ width:100%; height:100%; border-radius:10px; min-height:420px; }
+
+  /* Right column */
+  .rightCol{ display:flex; flex-direction:column; gap:14px; min-height:0 }
+  .vehicleItem{ padding:10px; border-radius:10px; display:flex; justify-content:space-between; align-items:center; gap:10px; background: rgba(255,255,255,0.008) }
+  .vehicleBadge{ padding:6px 8px; border-radius:8px; font-weight:800; color:#031021; background:linear-gradient(90deg,var(--accent2), var(--accent1)) }
+  .alertItem{ padding:10px; border-radius:8px; margin-bottom:8px; background: linear-gradient(90deg, rgba(255,80,80,0.08), rgba(255,80,80,0.02)); border-left: 4px solid rgba(255,80,80,0.9) }
+  .alertLow{ background: linear-gradient(90deg, rgba(255,200,80,0.06), rgba(255,200,80,0.01)); border-left: 4px solid rgba(255,200,80,0.85) }
+  .watchCard{ display:flex; flex-direction:column; gap:6px; padding:10px; border-radius:9px; background: rgba(255,255,255,0.02) }
+
+  /* modal */
+  .modalBack{ position:fixed; inset:0; background:rgba(2,8,20,0.6); display:flex; align-items:center; justify-content:center; z-index:9200 }
+  .modal{ width:720px; max-width:95%; background:#081026; padding:18px; border-radius:14px; border:1px solid var(--glass-border); box-shadow:0 30px 80px rgba(0,0,0,0.7) }
+  .modal h3{ margin:0 0 8px }
+
+  /* toasts */
+  .toasts{ position:fixed; right:18px; top:18px; display:flex; flex-direction:column; gap:10px; z-index:10000 }
+  .toast{ padding:10px 12px; border-radius:10px; min-width:220px; box-shadow:0 8px 28px rgba(0,0,0,0.5); font-weight:700 }
+  .toast.info{ background:linear-gradient(90deg,#7bdff7,#7b5cff); color:#041025 }
+  .toast.warn{ background:linear-gradient(90deg,#ffd28f,#ff7b7b); color:#041025 }
+
+  /* small screens */
+  @media (max-width:980px){
+    #app{ flex-direction:column; padding:12px; gap:12px }
+    .sidebar{ width:100%; display:flex; flex-direction:row; gap:10px; padding:12px; overflow:auto; align-items:center }
+    .layout{ grid-template-columns: 1fr; }
+    .rightCol{ flex-direction:row; overflow:auto }
+    .panel{ min-height:160px }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginOverlay" role="dialog" aria-labelledby="login-title">
+  <div class="loginCard" role="document">
+    <h2 id="login-title">Secure Login</h2>
+
+    <div class="formRow">
+      <label class="small" for="roleSelect">Role</label>
+      <select id="roleSelect" aria-label="Role selection">
+        <option value="admin">Administrator</option>
+        <option value="officer">Field Officer</option>
+        <option value="analyst">Analyst</option>
+      </select>
+    </div>
+
+    <div class="formRow"><input id="uName" placeholder="Username" aria-label="Username"/></div>
+    <div class="formRow"><input id="uPass" type="password" placeholder="Password" aria-label="Password"/></div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center">
+      <label class="small" style="display:flex; gap:8px; align-items:center"><input type="checkbox" id="remember"/> Remember me</label>
+      <div>
+        <button class="btn btn-ghost" onclick="demoFill()">Demo</button>
+        <button class="btn btn-primary" onclick="doLogin()">Login</button>
+      </div>
+    </div>
+
+    <p class="small" style="margin-top:12px; color:var(--muted)">Demo: <b>admin / admin123</b>. Data is simulated locally in your browser.</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" aria-hidden="true" style="display:none">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" role="navigation" aria-label="Main navigation">
+    <div class="brand">V-TRACK • Security Suite</div>
+
+    <nav class="nav" aria-label="Navigation">
+      <button id="nav-dashboard" class="active" onclick="navTo('dashboard')">Dashboard</button>
+      <button id="nav-watchlist" onclick="navTo('watchlist')">Watchlist</button>
+      <button id="nav-vehicles" onclick="navTo('vehicles')">Vehicles</button>
+      <button id="nav-alerts" onclick="navTo('alerts')">Alerts Center</button>
+      <button id="nav-cctv" onclick="navTo('cctv')">CCTV</button>
+      <button id="nav-profile" onclick="navTo('profile')">Profile</button>
+    </nav>
+
+    <div style="height:8px"></div>
+    <div class="sidebarFooter small">
+      <div>Connected: <b id="connCount">0</b> devices</div>
+      <div><button class="btn btn-ghost" onclick="logout()">Logout</button></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main" role="main">
+    <div class="topbar" role="region" aria-label="Top bar">
+      <div class="topLeft">
+        <div style="font-weight:900; font-size:18px">Vehicle Tracking Dashboard</div>
+        <input id="quickSearch" class="search" placeholder="Search plate or owner..." oninput="debouncedQuickFilter()" aria-label="Search vehicles"/>
+      </div>
+      <div class="topRight" style="display:flex; gap:12px; align-items:center">
+        <div class="statusChip" id="statusChip">Live • 24x7</div>
+        <div style="display:flex; gap:8px; align-items:center">
+          <div class="small">Role: <b id="userRole">-</b></div>
+          <div class="small"> <span id="simStatus">Running</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="layout" role="region" aria-label="Main layout">
+      <!-- LEFT: MAP + KPIs -->
+      <section style="display:flex; flex-direction:column; gap:12px;">
+        <div class="panel" id="panel-map" style="padding:10px; min-height:420px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+            <div style="font-weight:800">Live Map</div>
+            <div style="display:flex; gap:8px; align-items:center">
+              <button class="btn btn-ghost" onclick="centerAll()" title="Zoom to all devices">Center</button>
+              <button class="btn btn-ghost" id="btnToggle" onclick="toggleSimulation()">Pause</button>
+              <label class="small" style="display:flex; align-items:center; gap:8px; margin-left:6px">
+                Speed
+                <input id="simSpeed" type="range" min="200" max="2000" step="100" value="800" title="Simulation speed (ms tick)" />
+              </label>
+            </div>
+          </div>
+          <div id="map" role="application" aria-label="Vehicle map"></div>
+        </div>
+
+        <div class="panel" style="display:flex; gap:12px; align-items:center; justify-content:space-between; padding:18px">
+          <div style="flex:1">
+            <div style="font-weight:800">Quick Stats</div>
+            <div style="display:flex; gap:12px; margin-top:10px;">
+              <div style="flex:1; padding:12px; border-radius:10px; background:rgba(255,255,255,0.02)">
+                <div class="small">Active Vehicles</div>
+                <div style="font-size:20px; font-weight:900" id="statVehicles">0</div>
+              </div>
+              <div style="flex:1; padding:12px; border-radius:10px; background:rgba(255,255,255,0.02)">
+                <div class="small">Active Alerts</div>
+                <div style="font-size:20px; font-weight:900" id="statAlerts">0</div>
+              </div>
+              <div style="flex:1; padding:12px; border-radius:10px; background:rgba(255,255,255,0.02)">
+                <div class="small">Watchlist Matches</div>
+                <div style="font-size:20px; font-weight:900" id="statWatch">0</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="width:320px;">
+            <div class="small" style="margin-bottom:6px">Export Logs</div>
+            <div style="display:flex; gap:8px">
+              <button class="btn btn-primary" onclick="exportVehicles()">CSV</button>
+              <button class="btn btn-ghost" onclick="exportAlerts()">Alerts</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Panels -->
+      <aside class="rightCol">
+        <div id="panel-right-top" class="panel" style="min-height:180px;">
+          <div style="display:flex; justify-content:space-between; align-items:start">
+            <div style="font-weight:800">Vehicles Near You</div>
+            <div class="small" id="localTime"></div>
+          </div>
+
+          <div id="vehicleList" style="margin-top:10px; max-height:240px; overflow:auto"></div>
+        </div>
+
+        <div id="panel-right-bottom" class="panel" style="min-height:180px;">
+          <div style="display:flex; justify-content:space-between; align-items:center">
+            <div style="font-weight:800">Recent Alerts</div>
+            <div><button class="btn btn-ghost" onclick="clearAlerts()">Clear</button></div>
+          </div>
+          <div id="alertsFeed" style="margin-top:10px; max-height:220px; overflow:auto"></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- HIDDEN PAGES -->
+  <div id="hiddenPages" style="display:none">
+    <!-- WATCHLIST -->
+    <section id="page-watchlist" style="padding:14px;">
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <div style="font-weight:800">Crime / Terror Watchlist</div>
+          <div><input id="wlSearch" placeholder="Search plate..." oninput="renderWatchlist()" style="padding:8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.03)"/></div>
+        </div>
+        <div id="watchlistContainer" style="margin-top:10px; max-height:500px; overflow:auto"></div>
+      </div>
+    </section>
+
+    <!-- VEHICLES -->
+    <section id="page-vehicles" style="padding:14px">
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <div style="font-weight:800">All Vehicles</div>
+          <div><button class="btn btn-primary" onclick="addRandomVehicle()">Add Sim</button></div>
+        </div>
+        <div id="vehiclesContainer" style="margin-top:10px; max-height:520px; overflow:auto"></div>
+      </div>
+    </section>
+
+    <!-- ALERTS CENTER -->
+    <section id="page-alerts" style="padding:14px">
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <div style="font-weight:800">Full Alerts Center</div>
+          <div><button class="btn btn-ghost" onclick="downloadAlerts()">Download</button></div>
+        </div>
+        <div id="alertsCenter" style="margin-top:10px; max-height:520px; overflow:auto"></div>
+      </div>
+    </section>
+
+    <!-- CCTV -->
+    <section id="page-cctv" style="padding:14px">
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <div style="font-weight:800">CCTV Grid</div>
+          <div><button class="btn btn-primary" onclick="simulateANPR()">Scan</button></div>
+        </div>
+        <div class="cctvGrid" style="margin-top:12px; display:grid; grid-template-columns:repeat(2,1fr); gap:8px">
+          <div class="cam">CAM 01</div>
+          <div class="cam">CAM 02</div>
+          <div class="cam">CAM 03</div>
+          <div class="cam">CAM 04</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROFILE -->
+    <section id="page-profile" style="padding:14px">
+      <div class="panel">
+        <div style="font-weight:800">Profile</div>
+        <div style="margin-top:12px">
+          <div class="small">Name: <b id="profileName">-</b></div>
+          <div class="small" style="margin-top:6px">Role: <b id="profileRole">-</b></div>
+          <div style="margin-top:12px"><button class="btn btn-ghost" onclick="logout()">Logout</button></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+</div>
+
+<!-- MODAL: Vehicle Details -->
+<div id="vehicleModal" style="display:none" aria-hidden="true">
+  <div class="modalBack" role="dialog" aria-modal="true">
+    <div class="modal" role="document" id="modalContent">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <h3 id="modalTitle">Vehicle</h3>
+        <div style="display:flex; gap:8px">
+          <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+
+      <div id="modalBody" style="margin-top:12px; font-size:14px; color:var(--muted)"></div>
+
+      <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end">
+        <button class="btn btn-primary" id="modalNotifyBtn" onclick="notifyAuthoritiesFromModal()">Notify</button>
+        <button class="btn btn-ghost" id="modalExportBtn" onclick="exportVehicleHistoryModal()">Export History</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toasts" id="toasts"></div>
+
+<script>
+/* ===========================
+   Enhanced Frontend JS
+   - smoother markers (L.divIcon)
+   - toasts stack
+   - vehicle details modal
+   - simulation control + speed slider
+   - debounced search
+   - watchlist persistence
+   - capped history and better exports
+   ============================ */
+
+let state = {
+  user: null,
+  role: null,
+  vehicles: [],
+  alerts: [],
+  watchlist: [],
+  simRunning: true,
+  map: null,
+  markers: {},
+  polyLines: {},
+  simInterval: null,
+  simTickMs: 800
+};
+
+// small helpers
+const rnd = (min,max)=> Math.random()*(max-min)+min;
+const uid = (p)=> 'id_' + Math.random().toString(36).slice(2,9);
+const nowTs = ()=> new Date().toLocaleTimeString();
+
+// debounce util
+function debounce(fn, wait){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); }; }
+
+/* ========== Persistence ========== */
+function loadPersist(){
+  try{
+    const wl = localStorage.getItem('vtrack_watchlist');
+    if(wl) state.watchlist = JSON.parse(wl);
+    else {
+      // default demo watchlist
+      state.watchlist = [
+        {plate:'DL5CA9999', reason:'Linked to organized group', level:'High'},
+        {plate:'MH12XY4321', reason:'Stolen vehicle', level:'Critical'}
+      ];
+    }
+    document.getElementById('remember').checked = !!localStorage.getItem('vtrack_remember');
+    const userSaved = localStorage.getItem('vtrack_user');
+    if(userSaved && document.getElementById('remember').checked){
+      document.getElementById('uName').value = userSaved;
+    }
+  }catch(e){ console.warn(e) }
+}
+loadPersist();
+
+/* ========== Seed demo vehicles ========== */
+function seedVehicles(){
+  const sample = [
+    {plate:'UP32AB1234', owner:'Rakesh Sharma', coords:[26.8467,80.9462]},
+    {plate:'DL5CA9999', owner:'Unknown', coords:[28.7041,77.1025]},
+    {plate:'MH12XY4321', owner:'Amit Verma', coords:[19.0760,72.8777]},
+    {plate:'WB20BB0001', owner:'Event Logistic', coords:[22.5726,88.3639]}
+  ];
+  state.vehicles = sample.map(s => ({
+    id: uid(), plate: s.plate, owner:s.owner, coords: s.coords.slice(), speed: Math.floor(rnd(20,80)),
+    status: 'normal', history:[{coords:s.coords.slice(), at: Date.now()}]
+  }));
+}
+seedVehicles();
+
+/* ========== MAP SETUP ========== */
+function initMap(){
+  state.map = L.map('map', {preferCanvas:true}).setView([22.0,80.0],5);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:''}).addTo(state.map);
+  state.vehicles.forEach(v => createOrUpdateMarker(v));
+  centerAll();
+  updateStats();
+}
+
+/* Create a custom HTML marker so popups and icon content update smoothly */
+function createMarkerIcon(v){
+  const el = document.createElement('div');
+  el.className = 'vehicle-marker';
+  el.style.padding = '6px 8px';
+  el.style.borderRadius = '8px';
+  el.style.background = 'linear-gradient(90deg,#00d4ff,#7b5cff)';
+  el.style.color = '#031024';
+  el.style.fontWeight = '800';
+  el.style.fontSize = '12px';
+  el.style.boxShadow = '0 6px 18px rgba(0,0,0,0.5)';
+  el.innerText = v.plate;
+  return L.divIcon({html:el, className:'', iconSize:null, iconAnchor:[10,10]});
+}
+
+function createOrUpdateMarker(v){
+  // cap history for memory control
+  if(v.history.length > 500) v.history.splice(0, v.history.length - 500);
+
+  if(!state.markers[v.id]){
+    const marker = L.marker(v.coords, {icon: createMarkerIcon(v)}).addTo(state.map)
+      .bindPopup(`<strong>${v.plate}</strong><div style="font-size:13px;color:rgba(0,0,0,0.6)">${v.owner}</div>`);
+    marker.on('click', ()=> openVehicleDetails(v.id));
+    state.markers[v.id] = marker;
+    const poly = L.polyline(v.history.map(h=>h.coords), {color:'#ff7b7b', weight:3, opacity:0.6}).addTo(state.map);
+    state.polyLines[v.id] = poly;
+  } else {
+    // animate update: direct set
+    state.markers[v.id].setLatLng(v.coords);
+    state.markers[v.id].setIcon(createMarkerIcon(v));
+    state.markers[v.id].getPopup()?.setContent(`<strong>${v.plate}</strong><div style="font-size:13px;color:rgba(0,0,0,0.6)">${v.owner}<div style="margin-top:6px;font-weight:800">${v.speed} km/h</div></div>`);
+    state.polyLines[v.id].setLatLngs(v.history.map(h=>h.coords));
+  }
+}
+
+/* ========== SIMULATION ========== */
+function simTick(){
+  if(!state.simRunning) return;
+  state.vehicles.forEach(v=>{
+    // small random move (smaller steps so markers don't teleport)
+    const lat = v.coords[0] + rnd(-0.06,0.06);
+    const lng = v.coords[1] + rnd(-0.06,0.06);
+    v.coords = [lat,lng];
+    v.speed = Math.max(0, Math.round(v.speed + rnd(-8,8)));
+    v.history.push({coords:v.coords.slice(), at: Date.now()});
+    if(v.history.length>500) v.history.shift();
+    createOrUpdateMarker(v);
+    checkWatchlist(v);
+    checkSpeed(v);
+  });
+  renderVehicleList();
+}
+
+/* Start/Restart sim interval according to simTickMs */
+function startSim(){
+  stopSim();
+  state.simInterval = setInterval(simTick, state.simTickMs);
+  document.getElementById('simStatus').innerText = 'Running';
+  document.getElementById('btnToggle').innerText = 'Pause';
+}
+function stopSim(){
+  if(state.simInterval) clearInterval(state.simInterval);
+  state.simInterval = null;
+}
+
+/* toggle */
+function toggleSimulation(){
+  state.simRunning = !state.simRunning;
+  if(state.simRunning) startSim();
+  else { stopSim(); document.getElementById('simStatus').innerText = 'Paused'; document.getElementById('btnToggle').innerText = 'Resume'; }
+}
+
+/* speed slider */
+document.addEventListener('input', (e)=>{
+  if(e.target && e.target.id==='simSpeed'){
+    state.simTickMs = Number(e.target.value);
+    if(state.simRunning) startSim();
+  }
+});
+
+/* ========== ALERT RULES ========== */
+function checkWatchlist(v){
+  const match = state.watchlist.find(w => w.plate===v.plate);
+  if(match && !state.alerts.some(a=>a.vehicle===v.plate && a.type==='WATCHLIST')){
+    pushAlert({type:'WATCHLIST', text:`Watchlist match: ${v.plate} (${match.level})`, level:match.level, vehicle:v.plate});
+  }
+}
+function checkSpeed(v){
+  if(v.speed>100 && !state.alerts.some(a=>a.vehicle===v.plate && a.type==='SPEED')){
+    pushAlert({type:'SPEED', text:`Over-speeding: ${v.plate} (${v.speed} km/h)`, level:'High', vehicle:v.plate});
+  }
+}
+
+/* ========== ALERTS & TOASTS ========== */
+function pushAlert(obj){
+  const a = { id:uid(), at:Date.now(), ts:nowTs(), ...obj };
+  state.alerts.unshift(a);
+  if(state.alerts.length>500) state.alerts.pop();
+  renderAlerts();
+  updateStats();
+  toast(a);
+}
+function renderAlerts(){
+  const el = document.getElementById('alertsFeed'); if(!el) return;
+  el.innerHTML='';
+  state.alerts.slice(0,30).forEach(a=>{
+    const div = document.createElement('div');
+    div.className = (a.level==='Critical' || a.level==='High') ? 'alertItem' : 'alertLow';
+    div.innerHTML = `<div style="font-weight:700">${a.type} • ${a.vehicle || 'N/A'}</div>
+      <div style="font-size:13px;color:var(--muted)">${a.text}</div>
+      <div style="font-size:12px;color:var(--muted); margin-top:6px">${new Date(a.at).toLocaleString()}</div>`;
+    el.appendChild(div);
+  });
+  document.getElementById('statAlerts').innerText = state.alerts.length;
+  document.getElementById('statWatch').innerText = state.alerts.filter(a=>a.type==='WATCHLIST').length;
+}
+
+/* Toast stacking */
+function toast(a){
+  const container = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast ' + (a.level==='High' || a.level==='Critical' ? 'warn' : 'info');
+  t.innerHTML = `<div style="font-weight:900">${a.type}</div><div style="font-size:13px;margin-top:6px">${a.text}</div><div style="font-size:12px;color:rgba(0,0,0,0.5);margin-top:8px">${a.ts}</div>`;
+  container.appendChild(t);
+  // auto remove
+  setTimeout(()=>{ t.style.opacity=0; setTimeout(()=> t.remove(),450); }, 4200);
+}
+
+/* ========== VEHICLE UI ========== */
+function renderVehicleList(){
+  const el = document.getElementById('vehicleList');
+  el.innerHTML='';
+  const filter = (document.getElementById('quickSearch')?.value || '').trim().toLowerCase();
+  state.vehicles.forEach(v=>{
+    if(filter && !(v.plate.toLowerCase().includes(filter) || v.owner.toLowerCase().includes(filter))) return;
+    const node = document.createElement('div'); node.className='vehicleItem';
+    node.innerHTML = `<div>
+        <div style="font-weight:900">${v.plate}</div>
+        <div class="small" style="color:var(--muted)">${v.owner} • ${v.history.length} pts</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <div class="vehicleBadge">${v.speed} km/h</div>
+        <div style="display:flex; gap:6px">
+          <button class="btn btn-ghost" onclick="focusVehicle('${v.id}')">Focus</button>
+          <button class="btn btn-primary" onclick="openVehicleDetails('${v.id}')">Details</button>
+        </div>
+      </div>`;
+    el.appendChild(node);
+  });
+  document.getElementById('statVehicles').innerText = state.vehicles.length;
+  document.getElementById('connCount').innerText = state.vehicles.length;
+}
+
+/* Focus map on vehicle */
+function focusVehicle(idv){
+  const v = state.vehicles.find(x=>x.id===idv);
+  if(v && state.map) state.map.setView(v.coords, 13, {animate:true});
+}
+
+/* Details modal */
+function openVehicleDetails(idv){
+  const v = state.vehicles.find(x=>x.id===idv);
+  if(!v) return;
+  document.getElementById('vehicleModal').style.display = 'block';
+  document.getElementById('vehicleModal').ariaHidden = 'false';
+  document.getElementById('modalTitle').innerText = `${v.plate} — ${v.owner}`;
+  const lastSeen = v.history.length ? new Date(v.history[v.history.length-1].at).toLocaleString() : 'N/A';
+  let body = `<div class="small">Owner: <b style="color:#fff">${v.owner}</b></div>`;
+  body += `<div class="small" style="margin-top:6px">Current Speed: <b>${v.speed} km/h</b></div>`;
+  body += `<div class="small" style="margin-top:6px">Last seen: <b>${lastSeen}</b></div>`;
+  body += `<div style="margin-top:10px"><strong>Recent trail</strong><div style="font-size:13px;color:var(--muted); margin-top:6px">${v.history.slice(-8).map(h=>`${new Date(h.at).toLocaleString()} @ ${h.coords.map(n=>n.toFixed(4)).join(',')}`).join('<br>')}</div></div>`;
+  document.getElementById('modalBody').innerHTML = body;
+  // save current selected vehicle to modal buttons
+  document.getElementById('modalNotifyBtn').dataset.plate = v.plate;
+  document.getElementById('modalExportBtn').dataset.vid = v.id;
+  // center map
+  if(state.map) state.map.setView(v.coords, 12, {animate:true});
+}
+function closeModal(){
+  document.getElementById('vehicleModal').style.display='none';
+  document.getElementById('vehicleModal').ariaHidden='true';
+}
+function notifyAuthoritiesFromModal(){
+  const plate = document.getElementById('modalNotifyBtn').dataset.plate;
+  if(plate) pushAlert({type:'NOTIFY', text:`Authorities notified for ${plate}`, level:'High', vehicle:plate});
+}
+function exportVehicleHistoryModal(){
+  const idv = document.getElementById('modalExportBtn').dataset.vid;
+  exportVehicleHistory(idv);
+}
+
+/* Vehicle export */
+function exportVehicleHistory(idv){
+  const v = state.vehicles.find(x=>x.id===idv);
+  if(!v) return alert('Vehicle not found');
+  const rows = ['time,lat,lng'];
+  v.history.forEach(h => rows.push(`${new Date(h.at).toISOString()},${h.coords[0]},${h.coords[1]}`));
+  downloadFile(rows.join('\n'), `${v.plate}_history.csv`, 'text/csv');
+}
+
+/* Add random vehicle */
+function addRandomVehicle(){
+  const plate = 'NEW' + Math.floor(rnd(1000,9999));
+  const coords = [rnd(10,30), rnd(70,90)];
+  const v = { id:uid(), plate, owner:'Sim User', coords, speed:Math.floor(rnd(20,90)), status:'normal', history:[{coords:coords, at:Date.now()}] };
+  state.vehicles.push(v);
+  createOrUpdateMarker(v);
+  renderVehicleList();
+}
+
+/* Export CSV helpers */
+function exportVehicles(){
+  const rows = ['plate,owner,lat,lng,speed'];
+  state.vehicles.forEach(v => rows.push(`${v.plate},${v.owner},${v.coords[0]},${v.coords[1]},${v.speed}`));
+  downloadFile(rows.join('\n'),'vehicles_export.csv','text/csv');
+}
+function exportAlerts(){
+  const rows = ['type,vehicle,level,text,at'];
+  state.alerts.forEach(a => rows.push(`${a.type},${a.vehicle||''},${a.level||''},"${(a.text||'').replace(/"/g,'""')}",${new Date(a.at).toISOString()}`));
+  downloadFile(rows.join('\n'),'alerts_export.csv','text/csv');
+}
+function downloadFile(content, name, mime){
+  const blob = new Blob([content], {type:mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+/* CCTV ANPR simulate */
+function simulateANPR(){
+  if(!state.vehicles.length) return;
+  const v = state.vehicles[Math.floor(rnd(0,state.vehicles.length))];
+  pushAlert({type:'ANPR', text:`CCTV matched plate ${v.plate}`, level:'Medium', vehicle:v.plate});
+  if(state.watchlist.some(w=>w.plate===v.plate)) pushAlert({type:'ANPR-WATCH', text:`Watchlist vehicle seen on CCTV: ${v.plate}`, level:'High', vehicle:v.plate});
+}
+
+/* Alerts center & page renders */
+function renderAlertsCenter(){
+  const el = document.getElementById('alertsCenter');
+  el.innerHTML = '';
+  state.alerts.forEach(a=>{
+    const d = document.createElement('div'); d.className='alertItem';
+    d.innerHTML = `<div style="font-weight:800">${a.type} • ${a.vehicle||'N/A'}</div>
+      <div style="font-size:13px;color:var(--muted)">${a.text}</div>
+      <div style="font-size:12px;color:var(--muted)">${new Date(a.at).toLocaleString()}</div>`;
+    el.appendChild(d);
+  });
+}
+
+/* Clear alerts */
+function clearAlerts(){ state.alerts=[]; renderAlerts(); renderAlertsCenter(); updateStats(); }
+
+/* Watchlist UI persistence */
+function saveWatchlist(){ localStorage.setItem('vtrack_watchlist', JSON.stringify(state.watchlist)); }
+function renderWatchlist(){
+  const q = (document.getElementById('wlSearch')?.value||'').toLowerCase();
+  const el = document.getElementById('watchlistContainer');
+  el.innerHTML='';
+  state.watchlist.filter(w=>!q || w.plate.toLowerCase().includes(q)).forEach(w=>{
+    const node = document.createElement('div'); node.className='watchCard';
+    node.innerHTML = `<div style="display:flex;justify-content:space-between"><div style="font-weight:800">${w.plate}</div><div style="color:rgba(255,255,255,0.8)">${w.level}</div></div>
+      <div style="color:var(--muted)">${w.reason}</div>
+      <div style="display:flex; gap:8px; margin-top:8px"><button class="btn btn-primary" onclick="notifyAuthorities('${w.plate}')">Notify</button><button class="btn btn-ghost" onclick="removeWatch('${w.plate}')">Remove</button></div>`;
+    el.appendChild(node);
+  });
+}
+function notifyAuthorities(plate){ pushAlert({type:'NOTIFY', text:`Authorities notified for ${plate}`, level:'High', vehicle:plate}); }
+function removeWatch(plate){ state.watchlist = state.watchlist.filter(w=>w.plate!==plate); saveWatchlist(); renderWatchlist(); }
+
+/* Vehicles page */
+function renderVehiclesPage(){
+  const el = document.getElementById('vehiclesContainer');
+  el.innerHTML = '';
+  state.vehicles.forEach(v=>{
+    const d = document.createElement('div'); d.className='vehicleItem';
+    d.innerHTML = `<div><div style="font-weight:900">${v.plate}</div><div class="small" style="color:var(--muted)">${v.owner}</div></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="vehicleBadge">${v.speed} km/h</div>
+      <button class="btn btn-ghost" onclick="focusVehicle('${v.id}')">Focus</button>
+      <button class="btn btn-primary" onclick="exportVehicleHistory('${v.id}')">Export</button>
+    </div>`;
+    el.appendChild(d);
+  });
+}
+
+/* NAVIGATION (uses hidden pages to inject content) */
+function navTo(page){
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  const btn = document.getElementById('nav-'+page);
+  if(btn) btn.classList.add('active');
+  // default dashboard
+  if(page==='dashboard'){
+    // restore main panels
+    const mapPanel = document.getElementById('panel-map');
+    mapPanel.style.display='block';
+    mapPanel.innerHTML = '';
+    mapPanel.appendChild(document.getElementById('map').parentElement.querySelector('#map') ? document.getElementById('map') : document.getElementById('map'));
+    document.getElementById('panel-right-top').style.display='block';
+    document.getElementById('panel-right-bottom').style.display='block';
+    // re-attach map if needed
+    if(state.map) state.map.invalidateSize();
+  } else {
+    // render the hidden page content into the map panel for simplicity
+    const pages = {'watchlist':'page-watchlist','vehicles':'page-vehicles','alerts':'page-alerts','cctv':'page-cctv','profile':'page-profile'};
+    const content = document.getElementById(pages[page]).innerHTML;
+    const target = document.getElementById('panel-map');
+    document.getElementById('panel-right-top').style.display='none';
+    document.getElementById('panel-right-bottom').style.display='none';
+    target.style.display='block';
+    target.innerHTML = content + `<div style="margin-top:10px"><button class="btn btn-ghost" onclick="navTo('dashboard')">Back</button></div>`;
+    if(page==='watchlist') renderWatchlist();
+    if(page==='vehicles') renderVehiclesPage();
+    if(page==='alerts') renderAlertsCenter();
+  }
+}
+
+/* LOGIN / LOGOUT */
+function demoFill(){ document.getElementById('uName').value='admin'; document.getElementById('uPass').value='admin123'; document.getElementById('roleSelect').value='admin'; }
+function doLogin(){
+  const u = document.getElementById('uName').value.trim();
+  const p = document.getElementById('uPass').value.trim();
+  const role = document.getElementById('roleSelect').value;
+  if((u==='admin' && p==='admin123') || u.length>0){
+    state.user = u; state.role = role;
+    document.getElementById('userRole').innerText = role;
+    document.getElementById('profileName').innerText = u || 'Demo User';
+    document.getElementById('profileRole').innerText = role;
+    // remember
+    if(document.getElementById('remember').checked){ localStorage.setItem('vtrack_remember', '1'); localStorage.setItem('vtrack_user', u); } else { localStorage.removeItem('vtrack_remember'); localStorage.removeItem('vtrack_user'); }
+    document.getElementById('loginOverlay').style.display='none';
+    document.getElementById('app').style.display='flex'; document.getElementById('app').removeAttribute('aria-hidden');
+    // init map & sim
+    initMap();
+    renderVehicleList();
+    renderWatchlist();
+    renderAlerts();
+    startSim();
+    // tick local time
+    setInterval(()=>document.getElementById('localTime').innerText = new Date().toLocaleString(),1000);
+  } else {
+    alert('Invalid credentials.');
+  }
+}
+function logout(){
+  if(confirm('Logout?')) location.reload();
+}
+
+/* Stats update */
+function updateStats(){
+  document.getElementById('statVehicles').innerText = state.vehicles.length;
+  document.getElementById('statAlerts').innerText = state.alerts.length;
+  document.getElementById('statWatch').innerText = state.alerts.filter(a=>a.type==='WATCHLIST').length;
+  document.getElementById('connCount').innerText = state.vehicles.length;
+}
+
+/* Center all markers */
+function centerAll(){
+  const group = Object.values(state.markers).map(m=>m.getLatLng());
+  if(group.length) state.map.fitBounds(L.latLngBounds(group), {padding:[40,40]});
+}
+
+/* Quick search debounce */
+const debouncedQuickFilter = debounce(()=> renderVehicleList(), 250);
+
+/* small utility pages init */
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('localTime').innerText = new Date().toLocaleString();
+  // hook: pressing Escape closes modal
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+});
+
+// small convenience: make sure simulated map is visible/resizes
+window.addEventListener('resize', ()=> { if(state.map) state.map.invalidateSize(); });
+</script>
+
+</body>
 </html>
